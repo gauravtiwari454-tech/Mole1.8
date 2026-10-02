@@ -1,1 +1,50 @@
+name: Build Mole app
 
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.MOLE_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
+      - name: Build test APK (install this on your phone)
+        run: gradle --no-daemon assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mole-test-apk
+          path: app/build/outputs/apk/debug/*.apk
+
+      - name: Build signed release for Google Play
+        if: env.KEYSTORE_B64 != ''
+        env:
+          MOLE_KEYSTORE_PASSWORD: ${{ secrets.MOLE_KEYSTORE_PASSWORD }}
+          MOLE_KEY_ALIAS: ${{ secrets.MOLE_KEY_ALIAS }}
+          MOLE_KEY_PASSWORD: ${{ secrets.MOLE_KEY_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/mole.jks"
+          export MOLE_KEYSTORE="$RUNNER_TEMP/mole.jks"
+          gradle --no-daemon bundleRelease assembleRelease
+
+      - uses: actions/upload-artifact@v4
+        if: env.KEYSTORE_B64 != ''
+        with:
+          name: Mole-play-store-release
+          path: |
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/apk/release/*.apk

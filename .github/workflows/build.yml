@@ -22,16 +22,27 @@ jobs:
         with:
           gradle-version: '8.14.3'
 
+      - name: Find the project
+        run: |
+          echo "Files in the repository:"
+          find . -maxdepth 4 -not -path './.git*' | sort
+          SG=$(find . -name settings.gradle -not -path './.git/*' | head -1)
+          if [ -z "$SG" ]; then echo "::error::settings.gradle is missing from the repository"; exit 1; fi
+          echo "PROJECT_DIR=$(dirname "$SG")" >> "$GITHUB_ENV"
+          echo "Project found in: $(dirname "$SG")"
+
       - name: Build test APK (install this on your phone)
+        working-directory: ${{ env.PROJECT_DIR }}
         run: gradle --no-daemon assembleDebug
 
       - uses: actions/upload-artifact@v4
         with:
           name: Mole-test-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
 
       - name: Build signed release for Google Play
         if: env.KEYSTORE_B64 != ''
+        working-directory: ${{ env.PROJECT_DIR }}
         env:
           MOLE_KEYSTORE_PASSWORD: ${{ secrets.MOLE_KEYSTORE_PASSWORD }}
           MOLE_KEY_ALIAS: ${{ secrets.MOLE_KEY_ALIAS }}
@@ -46,5 +57,5 @@ jobs:
         with:
           name: Mole-play-store-release
           path: |
-            app/build/outputs/bundle/release/*.aab
-            app/build/outputs/apk/release/*.apk
+            ${{ env.PROJECT_DIR }}/app/build/outputs/bundle/release/*.aab
+            ${{ env.PROJECT_DIR }}/app/build/outputs/apk/release/*.apk
